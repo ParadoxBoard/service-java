@@ -1,0 +1,21 @@
+services:
+  spring:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: service-java
+    volumes:
+      - /home/deploy/configServiceJava/application.properties:/app/config/application.properties
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+    expose:
+      - "8080"
+    ports:
+      - "8080:8080"
+    restart: always
+    networks:
+      - app_net
+
+networks:
+  app_net:
+    external: false
