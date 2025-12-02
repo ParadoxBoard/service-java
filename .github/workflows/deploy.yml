@@ -1,0 +1,41 @@
+name: Deploy to VPS
+
+on:
+  workflow_run:
+    workflows: ["Build and Publish to GHCR"]
+    types: [completed]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            echo "Logging in to GHCR..."
+            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+
+            echo "Pulling latest image..."
+            docker pull ghcr.io/${{ github.repository }}:latest
+
+            echo "Stopping old container..."
+            docker stop ${{ secrets.APP_CONTAINER_NAME }} || true
+
+            echo "Removing old container..."
+            docker rm ${{ secrets.APP_CONTAINER_NAME }} || true
+
+            echo "Starting new container..."
+            docker run -d --name ${{ secrets.APP_CONTAINER_NAME }} \
+              --restart unless-stopped \
+              -p ${{ secrets.APP_PORT }}:8080 \
+              ghcr.io/${{ github.repository }}:latest
+
+            echo "Cleaning unused images..."
+            docker image prune -f
