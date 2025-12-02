@@ -18,12 +18,22 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_PRIVATE_KEY }}
           port: ${{ secrets.VPS_PORT }}
+          # ...existing code...
           script: |
-            echo "Logging in to GHCR..."
-            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+            echo "Using image from secret IMAGE_NAME..."
+            IMAGE="${{ secrets.IMAGE_NAME }}"
+            echo "Using image: $IMAGE"
+
+            # If you need to auth (image private), provide a PAT in secret VPS_GHCR_PAT and optionally GHCR_USERNAME
+            if [ -n "${{ secrets.VPS_GHCR_PAT }}" ]; then
+              echo "Logging in to GHCR using PAT (from secrets)..."
+              echo "${{ secrets.VPS_GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+            else
+              echo "No GHCR PAT provided in secrets; skipping docker login (image must be public)."
+            fi
 
             echo "Pulling latest image..."
-            docker pull ghcr.io/${{ github.repository }}:latest
+            docker pull "$IMAGE"
 
             echo "Stopping old container..."
             docker stop ${{ secrets.APP_CONTAINER_NAME }} || true
@@ -35,7 +45,8 @@ jobs:
             docker run -d --name ${{ secrets.APP_CONTAINER_NAME }} \
               --restart unless-stopped \
               -p ${{ secrets.APP_PORT }}:8080 \
-              ghcr.io/${{ github.repository }}:latest
+              -v /home/${{ secrets.VPS_USER }}/configServiceJava/application.properties:/app/config/application.properties:ro \
+              "$IMAGE"
 
             echo "Cleaning unused images..."
             docker image prune -f
