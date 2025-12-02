@@ -18,8 +18,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_PRIVATE_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          # ...existing code...
           script: |
+            set -euo pipefail
             echo "Using image from secret IMAGE_NAME..."
             IMAGE="${{ secrets.IMAGE_NAME }}"
             echo "Using image: $IMAGE"
@@ -34,6 +34,10 @@ jobs:
 
             echo "Pulling latest image..."
             docker pull "$IMAGE"
+            if [ $? -ne 0 ]; then
+              echo "ERROR: docker pull failed for $IMAGE" >&2
+              exit 1
+            fi
 
             echo "Stopping old container..."
             docker stop ${{ secrets.APP_CONTAINER_NAME }} || true
@@ -42,11 +46,17 @@ jobs:
             docker rm ${{ secrets.APP_CONTAINER_NAME }} || true
 
             echo "Starting new container..."
-            docker run -d --name ${{ secrets.APP_CONTAINER_NAME }} \
+            CONTAINER_ID=$(docker run -d --name ${{ secrets.APP_CONTAINER_NAME }} \
               --restart unless-stopped \
               -p ${{ secrets.APP_PORT }}:8080 \
               -v /home/${{ secrets.VPS_USER }}/configServiceJava/application.properties:/app/config/application.properties:ro \
-              "$IMAGE"
+              "$IMAGE")
 
+            if [ -z "$CONTAINER_ID" ]; then
+              echo "ERROR: docker run failed (no container id)" >&2
+              exit 1
+            fi
+
+            echo "Started container id: $CONTAINER_ID"
             echo "Cleaning unused images..."
             docker image prune -f
