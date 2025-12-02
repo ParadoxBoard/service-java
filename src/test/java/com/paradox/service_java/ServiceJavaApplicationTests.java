@@ -1,10 +1,8 @@
-package paradox.service_java;
+package com.paradox.service_java;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@Disabled("Legacy test location; new test in com.paradox.service_java package")
 @SpringBootTest
 class ServiceJavaApplicationTests {
 
@@ -13,3 +11,4 @@ class ServiceJavaApplicationTests {
     }
 
 }
+
