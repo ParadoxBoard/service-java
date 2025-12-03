@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,22 +25,24 @@ public class UserService {
 
     @Transactional
     public UserResponse createUser(UserRequest request) {
-        User u = new User();
-        u.setEmail(request.getEmail());
-        u.setUsername(request.getUsername());
-        u.setName(request.getName());
-        u.setAvatarUrl(request.getAvatarUrl());
-        if (request.getPassword() != null) {
-            // placeholder: hash password (implement BCrypt in production)
-            u.setPasswordHash(request.getPassword());
-        }
-        User saved;
+        // Construir la entidad usando el builder generado por Lombok
+        User u = User.builder()
+                .email(request.getEmail())
+                .username(request.getUsername())
+                .name(request.getName())
+                .avatarUrl(request.getAvatarUrl())
+                // placeholder: en producción usar BCrypt para el hash
+                .passwordHash(request.getPassword())
+                .createdAt(OffsetDateTime.now())
+                .build();
+
         try {
-            saved = userRepository.save(u);
+            User saved = userRepository.save(u);
+            return toResponse(saved);
         } catch (DataIntegrityViolationException ex) {
+            // Propagar la excepción (puedes mapearla a un error más amigable si lo deseas)
             throw ex;
         }
-        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
