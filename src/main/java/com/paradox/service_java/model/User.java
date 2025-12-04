@@ -44,6 +44,12 @@ public class User {
     @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
+    @Column(name = "github_id", length = 255)
+    private String githubId;
+
+    @Column(name = "github_installation_id", length = 255)
+    private String githubInstallationId;
+
     // DB: created_at timestamptz DEFAULT now() NULL
     @Column(name = "created_at", columnDefinition = "timestamptz default now()")
     private OffsetDateTime createdAt;

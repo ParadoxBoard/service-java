@@ -25,24 +25,53 @@ public class UserService {
 
     @Transactional
     public UserResponse createUser(UserRequest request) {
-        // Construir la entidad usando el builder generado por Lombok
-        User u = User.builder()
-                .email(request.getEmail())
-                .username(request.getUsername())
-                .name(request.getName())
-                .avatarUrl(request.getAvatarUrl())
-                // placeholder: en producción usar BCrypt para el hash
-                .passwordHash(request.getPassword())
-                .createdAt(OffsetDateTime.now())
-                .build();
-
+        User u = new User();
+        u.setEmail(request.getEmail());
+        u.setUsername(request.getUsername());
+        u.setName(request.getName());
+        u.setAvatarUrl(request.getAvatarUrl());
+        if (request.getPassword() != null) {
+            // placeholder: hash password (implement BCrypt in production)
+            u.setPasswordHash(request.getPassword());
+        }
+        User saved;
         try {
-            User saved = userRepository.save(u);
-            return toResponse(saved);
+            saved = userRepository.save(u);
         } catch (DataIntegrityViolationException ex) {
-            // Propagar la excepción (puedes mapearla a un error más amigable si lo deseas)
             throw ex;
         }
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public UserResponse createOrUpdateFromGithub(Long githubId, String login, String email, Long installationId, String avatarUrl, String name) {
+        // buscar por githubId o email
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            // intento por github id (si se guarda como string)
+            // buscar por username igual al login
+            user = userRepository.findByUsername(login).orElse(null);
+        }
+
+        if (user == null) {
+            user = new User();
+            user.setEmail(email);
+            user.setUsername(login);
+            user.setName(name);
+            user.setAvatarUrl(avatarUrl);
+            // set github-specific fields
+            user.setGithubId(String.valueOf(githubId));
+            user.setGithubInstallationId(String.valueOf(installationId));
+            user = userRepository.save(user);
+        } else {
+            // update fields
+            user.setGithubId(String.valueOf(githubId));
+            user.setGithubInstallationId(String.valueOf(installationId));
+            user.setAvatarUrl(avatarUrl);
+            user.setName(name);
+            user = userRepository.save(user);
+        }
+        return toResponse(user);
     }
 
     @Transactional(readOnly = true)
