@@ -16,6 +16,8 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.Map;
+import jakarta.validation.Valid;
 
 /**
  * Controlador para manejar la autenticación con GitHub OAuth
@@ -90,26 +92,42 @@ public class AuthController {
      * POST /auth/github/register
      */
     @PostMapping("/register")
-    public ResponseEntity<?> registerWithInstallation(@RequestBody GithubRegisterRequest request) {
+    public ResponseEntity<?> registerWithInstallation(@Valid @RequestBody GithubRegisterRequest request) {
         try {
             Long installationId = request.getInstallationId();
             // Obtener informacion de la installation (owner)
-            var installInfo = gitHubApiService.getInstallation(installationId);
+            Map<String, Object> installInfo = gitHubApiService.getInstallation(installationId);
             // crear token de installation
             String installToken = installationTokenService.createInstallationToken(installationId);
             // obtener usuario desde installation token
-            var ghUser = gitHubApiService.getUserWithInstallationToken(installToken);
+            Map<String, Object> ghUser = gitHubApiService.getUserWithInstallationToken(installToken);
 
-            // extraer campos
+            // extraer campos de forma segura
             Long ghId = null;
-            if (installInfo != null && installInfo.get("account") instanceof java.util.Map) {
-                Object idObj = ((java.util.Map)installInfo.get("account")).get("id");
-                if (idObj != null) ghId = Long.valueOf(String.valueOf(idObj));
+            if (installInfo != null) {
+                Object accountObj = installInfo.get("account");
+                if (accountObj instanceof Map<?, ?> accountMap) {
+                    Object idObj = accountMap.get("id");
+                    if (idObj != null) {
+                        try { ghId = Long.valueOf(String.valueOf(idObj)); } catch (NumberFormatException ignored) {}
+                    }
+                }
             }
-            String login = ghUser != null ? String.valueOf(ghUser.get("login")) : null;
-            String email = ghUser != null ? String.valueOf(ghUser.get("email")) : null;
-            String avatar = ghUser != null ? String.valueOf(ghUser.get("avatar_url")) : null;
-            String name = ghUser != null ? String.valueOf(ghUser.get("name")) : null;
+
+            String login = null;
+            String email = null;
+            String avatar = null;
+            String name = null;
+            if (ghUser != null) {
+                Object loginObj = ghUser.get("login");
+                if (loginObj != null) login = String.valueOf(loginObj);
+                Object emailObj = ghUser.get("email");
+                if (emailObj != null) email = String.valueOf(emailObj);
+                Object avatarObj = ghUser.get("avatar_url");
+                if (avatarObj != null) avatar = String.valueOf(avatarObj);
+                Object nameObj = ghUser.get("name");
+                if (nameObj != null) name = String.valueOf(nameObj);
+            }
 
             var userResp = userService.createOrUpdateFromGithub(ghId, login, email, installationId, avatar, name);
             return ResponseEntity.created(URI.create("/api/users/" + userResp.getId())).body(userResp);

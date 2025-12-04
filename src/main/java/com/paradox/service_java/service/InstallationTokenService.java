@@ -19,9 +19,9 @@ public class InstallationTokenService {
         this.jwtGenerator = jwtGenerator;
     }
 
-    public String createInstallationToken(Long installationId) throws Exception {
+    public String createInstallationToken(Long installationId) {
         String jwt = jwtGenerator.generateJwt();
-        Map response = this.webClient.post()
+        Map<String, Object> response = this.webClient.post()
                 .uri(uriBuilder -> uriBuilder.path("/app/installations/{id}/access_tokens").build(installationId))
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt)
                 .accept(MediaType.APPLICATION_JSON)
@@ -35,4 +35,3 @@ public class InstallationTokenService {
         return (String) response.get("token");
     }
 }
-
