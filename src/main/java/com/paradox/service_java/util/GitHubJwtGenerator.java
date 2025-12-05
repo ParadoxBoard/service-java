@@ -75,4 +75,14 @@ public class GitHubJwtGenerator {
                 .signWith(privateKey, SignatureAlgorithm.RS256)
                 .compact();
     }
+
+    // Check without generating the JWT
+    public boolean isConfigured() {
+        return this.privateKey != null && this.appId != null && !this.appId.isEmpty();
+    }
+
+    // Expose appId for debugging (does not expose private key)
+    public String getAppId() {
+        return this.appId;
+    }
 }

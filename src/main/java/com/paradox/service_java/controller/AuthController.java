@@ -4,7 +4,6 @@ import com.paradox.service_java.dto.auth.AuthResponse;
 import com.paradox.service_java.service.auth.AuthService;
 import com.paradox.service_java.service.auth.GithubOAuthService;
 import com.paradox.service_java.service.GitHubApiService;
-import com.paradox.service_java.service.InstallationTokenService;
 import com.paradox.service_java.dto.GithubRegisterRequest;
 import com.paradox.service_java.service.UserService;
 import jakarta.validation.constraints.NotBlank;
@@ -32,7 +31,6 @@ public class AuthController {
     private final AuthService authService;
     private final GithubOAuthService githubOAuthService;
     private final GitHubApiService gitHubApiService;
-    private final InstallationTokenService installationTokenService;
     private final UserService userService;
 
     /**
@@ -42,9 +40,9 @@ public class AuthController {
     @GetMapping("/login")
     public ResponseEntity<Void> login() {
         log.info("Redirecting to GitHub OAuth login");
-        
+
         String authorizationUrl = githubOAuthService.getAuthorizationUrl();
-        
+
         return ResponseEntity
                 .status(HttpStatus.FOUND)
                 .location(URI.create(authorizationUrl))
@@ -63,7 +61,7 @@ public class AuthController {
 
         try {
             AuthResponse response = authService.handleGithubCallback(code);
-            
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error processing GitHub callback: {}", e.getMessage(), e);
@@ -78,7 +76,7 @@ public class AuthController {
     @GetMapping("/authorize-url")
     public ResponseEntity<AuthUrlResponse> getAuthorizationUrl() {
         String url = githubOAuthService.getAuthorizationUrl();
-        
+
         return ResponseEntity.ok(new AuthUrlResponse(url));
     }
 
@@ -97,13 +95,16 @@ public class AuthController {
             Long installationId = request.getInstallationId();
             // Obtener informacion de la installation (owner)
             Map<String, Object> installInfo = gitHubApiService.getInstallation(installationId);
-            // crear token de installation
-            String installToken = installationTokenService.createInstallationToken(installationId);
-            // obtener usuario desde installation token
-            Map<String, Object> ghUser = gitHubApiService.getUserWithInstallationToken(installToken);
+            // No creamos ni usamos installation token para obtener /user (las installation tokens no representan un usuario
+            // y pueden devolver 403). Usamos únicamente installInfo.account (owner) para obtener info pública.
 
-            // extraer campos de forma segura
+            // extraer campos de forma segura desde installInfo.account
             Long ghId = null;
+            String login = null;
+            String email = null; // no disponible vía installation token
+            String avatar = null;
+            String name = null;
+
             if (installInfo != null) {
                 Object accountObj = installInfo.get("account");
                 if (accountObj instanceof Map<?, ?> accountMap) {
@@ -111,22 +112,19 @@ public class AuthController {
                     if (idObj != null) {
                         try { ghId = Long.valueOf(String.valueOf(idObj)); } catch (NumberFormatException ignored) {}
                     }
+                    Object loginObj = accountMap.get("login");
+                    if (loginObj != null) login = String.valueOf(loginObj);
+                    Object avatarObj = accountMap.get("avatar_url");
+                    if (avatarObj != null) avatar = String.valueOf(avatarObj);
+                    // name/email no están garantizados aquí; quedan null excepto si la cuenta los provee
+                    Object nameObj = accountMap.get("name");
+                    if (nameObj != null) name = String.valueOf(nameObj);
                 }
             }
 
-            String login = null;
-            String email = null;
-            String avatar = null;
-            String name = null;
-            if (ghUser != null) {
-                Object loginObj = ghUser.get("login");
-                if (loginObj != null) login = String.valueOf(loginObj);
-                Object emailObj = ghUser.get("email");
-                if (emailObj != null) email = String.valueOf(emailObj);
-                Object avatarObj = ghUser.get("avatar_url");
-                if (avatarObj != null) avatar = String.valueOf(avatarObj);
-                Object nameObj = ghUser.get("name");
-                if (nameObj != null) name = String.valueOf(nameObj);
+            // Si no hay email, crear un fallback para respetar la restricción NOT NULL en la BD
+            if (email == null && login != null) {
+                email = login + "@users.noreply.github.com";
             }
 
             var userResp = userService.createOrUpdateFromGithub(ghId, login, email, installationId, avatar, name);

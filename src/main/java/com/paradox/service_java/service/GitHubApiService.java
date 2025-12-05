@@ -6,6 +6,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.Map;
 
@@ -21,24 +22,27 @@ public class GitHubApiService {
         this.jwtGenerator = jwtGenerator;
     }
 
-    public Map<String, Object> getInstallation(Long installationId) {
-        String jwt = jwtGenerator.generateJwt();
-        return this.webClient.get()
-                .uri(uriBuilder -> uriBuilder.path("/app/installations/{id}").build(installationId))
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt)
-                .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .bodyToMono(MAP_REF)
-                .block();
+    private HttpHeaders defaultAppHeaders(String bearer) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + bearer);
+        headers.set(HttpHeaders.ACCEPT, "application/vnd.github+json");
+        headers.set(HttpHeaders.USER_AGENT, "paradoxboard-service");
+        headers.set("X-GitHub-Api-Version", "2022-11-28");
+        return headers;
     }
 
-    public Map<String, Object> getUserWithInstallationToken(String installationToken) {
-        return this.webClient.get()
-                .uri("/user")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + installationToken)
-                .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .bodyToMono(MAP_REF)
-                .block();
+    public Map<String, Object> getInstallation(Long installationId) {
+        String jwt = jwtGenerator.generateJwt();
+        try {
+            return this.webClient.get()
+                    .uri(uriBuilder -> uriBuilder.path("/app/installations/{id}").build(installationId))
+                    .headers(h -> h.addAll(defaultAppHeaders(jwt)))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(MAP_REF)
+                    .block();
+        } catch (WebClientResponseException ex) {
+            throw new IllegalStateException(ex.getStatusCode().value() + " " + ex.getStatusText() + " from GET https://api.github.com/app/installations/" + installationId + " - " + ex.getResponseBodyAsString(), ex);
+        }
     }
 }
