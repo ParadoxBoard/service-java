@@ -120,6 +120,14 @@ public class AuthService {
     private void updateUserFromGithub(User user, GithubUserDTO githubUser) {
         boolean updated = false;
 
+        if (githubUser.getId() != null) {
+            String githubId = String.valueOf(githubUser.getId());
+            if (!githubId.equals(user.getGithubId())) {
+                user.setGithubId(githubId);
+                updated = true;
+            }
+        }
+
         if (githubUser.getEmail() != null && !githubUser.getEmail().equals(user.getEmail())) {
             user.setEmail(githubUser.getEmail());
             updated = true;

@@ -6,6 +6,13 @@ import com.paradox.service_java.service.auth.GithubOAuthService;
 import com.paradox.service_java.service.GitHubApiService;
 import com.paradox.service_java.dto.GithubRegisterRequest;
 import com.paradox.service_java.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +33,7 @@ import jakarta.validation.Valid;
 @RequestMapping("/auth/github")
 @RequiredArgsConstructor
 @Validated
+@Tag(name = "Authentication", description = "GitHub OAuth authentication endpoints")
 public class AuthController {
 
     private final AuthService authService;
@@ -37,6 +45,12 @@ public class AuthController {
      * Endpoint de login - Redirige al usuario a GitHub para autenticación
      * GET /auth/github/login
      */
+    @Operation(summary = "Initiate GitHub OAuth login",
+               description = "Redirects user to GitHub authorization page")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "302", description = "Redirect to GitHub OAuth"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/login")
     public ResponseEntity<Void> login() {
         log.info("Redirecting to GitHub OAuth login");
@@ -53,8 +67,18 @@ public class AuthController {
      * Callback de GitHub OAuth - Recibe el código de autorización
      * GET /auth/github/callback?code=xxx
      */
+    @Operation(summary = "GitHub OAuth callback",
+               description = "Handles GitHub OAuth callback and returns JWT token")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Authentication successful",
+                    content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Missing or invalid code"),
+        @ApiResponse(responseCode = "401", description = "GitHub authentication failed"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/callback")
     public ResponseEntity<AuthResponse> callback(
+            @Parameter(description = "GitHub authorization code", required = true)
             @RequestParam("code") @NotBlank String code
     ) {
         log.info("Processing GitHub OAuth callback with code");
@@ -73,6 +97,12 @@ public class AuthController {
      * Endpoint alternativo para obtener la URL de autorización (útil para frontends SPA)
      * GET /auth/github/authorize-url
      */
+    @Operation(summary = "Get GitHub authorization URL",
+               description = "Returns the GitHub OAuth authorization URL for frontend applications")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Authorization URL returned successfully"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/authorize-url")
     public ResponseEntity<AuthUrlResponse> getAuthorizationUrl() {
         String url = githubOAuthService.getAuthorizationUrl();
@@ -89,8 +119,21 @@ public class AuthController {
      * Endpoint para registro de usuarios usando GitHub Installation ID
      * POST /auth/github/register
      */
+    @Operation(summary = "Register user with GitHub Installation",
+               description = "Registers or updates a user using GitHub App Installation ID")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "User created successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid request"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @PostMapping("/register")
-    public ResponseEntity<?> registerWithInstallation(@Valid @RequestBody GithubRegisterRequest request) {
+    public ResponseEntity<?> registerWithInstallation(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "GitHub installation registration request",
+                required = true,
+                content = @Content(schema = @Schema(implementation = GithubRegisterRequest.class))
+            )
+            @Valid @RequestBody GithubRegisterRequest request) {
         try {
             Long installationId = request.getInstallationId();
             // Obtener informacion de la installation (owner)
