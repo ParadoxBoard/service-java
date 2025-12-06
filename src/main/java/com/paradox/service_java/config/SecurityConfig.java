@@ -23,7 +23,22 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**", "/api/users/**").permitAll()
+                // Swagger/OpenAPI endpoints
+                .requestMatchers(
+                    "/swagger-ui/**",
+                    "/swagger-ui.html",
+                    "/v3/api-docs/**",
+                    "/api-docs/**",
+                    "/swagger-resources/**",
+                    "/webjars/**"
+                ).permitAll()
+                // Auth endpoints
+                .requestMatchers("/auth/**").permitAll()
+                // Webhook endpoints
+                .requestMatchers("/webhooks/**").permitAll()
+                // User endpoints (temporarily public for testing, should be protected)
+                .requestMatchers("/api/users/**").permitAll()
+                // All other requests require authentication
                 .anyRequest().authenticated()
             );
         
