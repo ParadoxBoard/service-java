@@ -69,11 +69,23 @@ public class AuthService {
     }
 
     /**
-     * Busca un usuario existente por username o email, o crea uno nuevo
+     * Busca un usuario existente por githubId, username o email, o crea uno nuevo
      */
     private User findOrCreateUser(GithubUserDTO githubUser) {
-        // Intentar buscar por username (login de GitHub)
-        Optional<User> existingUser = userRepository.findByUsername(githubUser.getLogin());
+        String githubId = String.valueOf(githubUser.getId());
+
+        // 1. Intentar buscar por githubId primero
+        Optional<User> existingUser = userRepository.findByGithubId(githubId);
+
+        if (existingUser.isPresent()) {
+            log.info("Found existing user by githubId: {}", githubId);
+            User user = existingUser.get();
+            updateUserFromGithub(user, githubUser);
+            return user;
+        }
+
+        // 2. Intentar buscar por username (login de GitHub)
+        existingUser = userRepository.findByUsername(githubUser.getLogin());
 
         if (existingUser.isPresent()) {
             log.info("Found existing user by username: {}", githubUser.getLogin());
@@ -84,8 +96,8 @@ public class AuthService {
             return user;
         }
 
-        // Si no existe, intentar buscar por email (si GitHub lo proporciona)
-        if (githubUser.getEmail() != null) {
+        // 3. Si no existe, intentar buscar por email (si GitHub lo proporciona)
+        if (githubUser.getEmail() != null && !githubUser.getEmail().isEmpty()) {
             existingUser = userRepository.findByEmail(githubUser.getEmail());
             if (existingUser.isPresent()) {
                 log.info("Found existing user by email: {}", githubUser.getEmail());
@@ -105,8 +117,17 @@ public class AuthService {
      */
     private User createUserFromGithub(GithubUserDTO githubUser) {
         User user = new User();
+        user.setGithubId(String.valueOf(githubUser.getId()));
         user.setUsername(githubUser.getLogin());
-        user.setEmail(githubUser.getEmail());
+
+        // Si GitHub no proporciona email, usar un fallback
+        String email = githubUser.getEmail();
+        if (email == null || email.isEmpty()) {
+            email = githubUser.getLogin() + "@users.noreply.github.com";
+            log.info("Using fallback email for user: {}", email);
+        }
+        user.setEmail(email);
+
         user.setName(githubUser.getName());
         user.setAvatarUrl(githubUser.getAvatarUrl());
         user.setCreatedAt(OffsetDateTime.now());

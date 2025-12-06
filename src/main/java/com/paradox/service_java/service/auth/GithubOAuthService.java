@@ -102,8 +102,80 @@ public class GithubOAuthService {
             throw new GithubAuthException("Failed to get user data from GitHub");
         }
 
+        // Si el email no está disponible en /user, obtenerlo de /user/emails
+        if (user.getEmail() == null || user.getEmail().isEmpty()) {
+            log.info("Email not available in user data, fetching from /user/emails");
+            String email = fetchPrimaryEmail(accessToken);
+            user.setEmail(email);
+        }
+
         log.info("Successfully fetched user data for GitHub user: {}", user.getLogin());
         return user;
+    }
+
+    /**
+     * Obtiene el email primario y verificado del usuario desde /user/emails
+     */
+    private String fetchPrimaryEmail(String accessToken) {
+        try {
+            var emails = webClient.get()
+                    .uri("https://api.github.com/user/emails")
+                    .header("Authorization", "Bearer " + accessToken)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(Object[].class)
+                    .block();
+
+            if (emails != null && emails.length > 0) {
+                for (Object emailObj : emails) {
+                    if (emailObj instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> emailData = (Map<String, Object>) emailObj;
+                        Boolean primary = (Boolean) emailData.get("primary");
+                        Boolean verified = (Boolean) emailData.get("verified");
+                        String email = (String) emailData.get("email");
+
+                        if (Boolean.TRUE.equals(primary) && Boolean.TRUE.equals(verified) && email != null) {
+                            log.info("Found primary verified email");
+                            return email;
+                        }
+                    }
+                }
+
+                // Si no hay email primario verificado, usar el primero verificado
+                for (Object emailObj : emails) {
+                    if (emailObj instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> emailData = (Map<String, Object>) emailObj;
+                        Boolean verified = (Boolean) emailData.get("verified");
+                        String email = (String) emailData.get("email");
+
+                        if (Boolean.TRUE.equals(verified) && email != null) {
+                            log.info("Using first verified email");
+                            return email;
+                        }
+                    }
+                }
+
+                // Como último recurso, usar cualquier email
+                if (emails[0] instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> emailData = (Map<String, Object>) emails[0];
+                    String email = (String) emailData.get("email");
+                    if (email != null) {
+                        log.info("Using first available email");
+                        return email;
+                    }
+                }
+            }
+
+            // Si no hay emails, generar uno basado en el username
+            log.warn("No email found for user, generating fallback email");
+            return null;
+        } catch (Exception e) {
+            log.error("Error fetching user emails: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
