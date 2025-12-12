@@ -6,6 +6,10 @@ import com.paradox.service_java.service.auth.GithubOAuthService;
 import com.paradox.service_java.service.GitHubApiService;
 import com.paradox.service_java.dto.GithubRegisterRequest;
 import com.paradox.service_java.service.UserService;
+import com.paradox.service_java.service.InstallationService;
+import com.paradox.service_java.service.SyncService;
+import com.paradox.service_java.model.Installation;
+import com.paradox.service_java.model.Repository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -22,6 +26,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import jakarta.validation.Valid;
 
@@ -40,6 +45,8 @@ public class AuthController {
     private final GithubOAuthService githubOAuthService;
     private final GitHubApiService gitHubApiService;
     private final UserService userService;
+    private final InstallationService installationService;
+    private final SyncService syncService;
 
     /**
      * Endpoint de login - Redirige al usuario a GitHub para autenticación
@@ -136,45 +143,88 @@ public class AuthController {
             @Valid @RequestBody GithubRegisterRequest request) {
         try {
             Long installationId = request.getInstallationId();
-            // Obtener informacion de la installation (owner)
-            Map<String, Object> installInfo = gitHubApiService.getInstallation(installationId);
-            // No creamos ni usamos installation token para obtener /user (las installation tokens no representan un usuario
-            // y pueden devolver 403). Usamos únicamente installInfo.account (owner) para obtener info pública.
+            log.info("Processing installation registration for installationId: {}", installationId);
 
-            // extraer campos de forma segura desde installInfo.account
+            // 1. Obtener información de la instalación desde GitHub API
+            Map<String, Object> installInfo = gitHubApiService.getInstallation(installationId);
+
+            if (installInfo == null) {
+                log.error("Installation info is null for installationId: {}", installationId);
+                return ResponseEntity.badRequest().body(Map.of("error", "Installation not found"));
+            }
+
+            // 2. Crear o actualizar Installation en BD
+            Installation installation = installationService.createOrUpdateFromGitHub(installInfo);
+            log.info("Installation saved/updated: {} - {}",
+                    installation.getInstallationId(), installation.getAccountLogin());
+
+            // 3. Sincronización inicial de repositorios
+            List<Repository> syncedRepos = syncService.syncInitial(installationId, installation);
+            log.info("Synced {} repositories for installation {}", syncedRepos.size(), installationId);
+
+            // 4. Extraer datos de la cuenta para crear/actualizar usuario
             Long ghId = null;
             String login = null;
-            String email = null; // no disponible vía installation token
+            String email = null;
             String avatar = null;
             String name = null;
 
-            if (installInfo != null) {
-                Object accountObj = installInfo.get("account");
-                if (accountObj instanceof Map<?, ?> accountMap) {
-                    Object idObj = accountMap.get("id");
-                    if (idObj != null) {
-                        try { ghId = Long.valueOf(String.valueOf(idObj)); } catch (NumberFormatException ignored) {}
+            Object accountObj = installInfo.get("account");
+            if (accountObj instanceof Map<?, ?> accountMap) {
+                Object idObj = accountMap.get("id");
+                if (idObj != null) {
+                    try {
+                        ghId = Long.valueOf(String.valueOf(idObj));
+                    } catch (NumberFormatException e) {
+                        log.warn("Could not parse github id: {}", idObj);
                     }
-                    Object loginObj = accountMap.get("login");
-                    if (loginObj != null) login = String.valueOf(loginObj);
-                    Object avatarObj = accountMap.get("avatar_url");
-                    if (avatarObj != null) avatar = String.valueOf(avatarObj);
-                    // name/email no están garantizados aquí; quedan null excepto si la cuenta los provee
-                    Object nameObj = accountMap.get("name");
-                    if (nameObj != null) name = String.valueOf(nameObj);
                 }
+                Object loginObj = accountMap.get("login");
+                if (loginObj != null) login = String.valueOf(loginObj);
+                Object avatarObj = accountMap.get("avatar_url");
+                if (avatarObj != null) avatar = String.valueOf(avatarObj);
+                Object nameObj = accountMap.get("name");
+                if (nameObj != null) name = String.valueOf(nameObj);
             }
 
-            // Si no hay email, crear un fallback para respetar la restricción NOT NULL en la BD
+            // 5. Crear email fallback si no está disponible
             if (email == null && login != null) {
                 email = login + "@users.noreply.github.com";
             }
 
+            // 6. Crear o actualizar usuario con github_installation_id
             var userResp = userService.createOrUpdateFromGithub(ghId, login, email, installationId, avatar, name);
-            return ResponseEntity.created(URI.create("/api/users/" + userResp.getId())).body(userResp);
+
+            log.info("User created/updated: {} with installation {}", userResp.getUsername(), installationId);
+
+            // 7. Preparar respuesta con datos de instalación y repositorios sincronizados
+            Map<String, Object> response = Map.of(
+                "user", userResp,
+                "installation", Map.of(
+                    "id", installation.getId(),
+                    "installationId", installation.getInstallationId(),
+                    "accountLogin", installation.getAccountLogin(),
+                    "accountType", installation.getAccountType()
+                ),
+                "syncedRepositories", syncedRepos.stream()
+                    .map(repo -> Map.of(
+                        "id", repo.getId(),
+                        "name", repo.getName(),
+                        "fullName", repo.getFullName(),
+                        "private", repo.getPrivateRepo()
+                    ))
+                    .toList()
+            );
+
+            return ResponseEntity
+                    .created(URI.create("/api/users/" + userResp.getId()))
+                    .body(response);
+
         } catch (Exception e) {
             log.error("Error in registerWithInstallation: {}", e.getMessage(), e);
-            throw new RuntimeException(e);
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
         }
     }
 }
