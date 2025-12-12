@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +41,37 @@ public class UserService {
             throw ex;
         }
         return toResponse(saved);
+    }
+
+    @Transactional
+    public UserResponse createOrUpdateFromGithub(Long githubId, String login, String email, Long installationId, String avatarUrl, String name) {
+        // buscar por githubId o email
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            // intento por github id (si se guarda como string)
+            // buscar por username igual al login
+            user = userRepository.findByUsername(login).orElse(null);
+        }
+
+        if (user == null) {
+            user = new User();
+            user.setEmail(email);
+            user.setUsername(login);
+            user.setName(name);
+            user.setAvatarUrl(avatarUrl);
+            // set github-specific fields
+            user.setGithubId(String.valueOf(githubId));
+            user.setGithubInstallationId(String.valueOf(installationId));
+            user = userRepository.save(user);
+        } else {
+            // update fields
+            user.setGithubId(String.valueOf(githubId));
+            user.setGithubInstallationId(String.valueOf(installationId));
+            user.setAvatarUrl(avatarUrl);
+            user.setName(name);
+            user = userRepository.save(user);
+        }
+        return toResponse(user);
     }
 
     @Transactional(readOnly = true)
