@@ -1,18 +1,24 @@
 package com.paradox.service_java.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.paradox.service_java.model.WebhookLog;
+import com.paradox.service_java.repository.WebhookLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.time.OffsetDateTime;
 import java.util.HexFormat;
+import java.util.Map;
 
 /**
  * Service to handle GitHub webhook events
@@ -23,6 +29,8 @@ import java.util.HexFormat;
 public class WebhookService {
 
     private final ObjectMapper objectMapper;
+    private final WebhookLogRepository webhookLogRepository;
+    private final InstallationService installationService;
 
     @Value("${webhook.secret:}")
     private String webhookSecret;
@@ -74,10 +82,18 @@ public class WebhookService {
     /**
      * Process webhook event based on type
      */
-    public void processWebhook(String eventType, String payload) {
+    @Transactional
+    public void processWebhook(String eventType, String payload, String signature, String deliveryId) {
+        WebhookLog webhookLog = null;
+
         try {
+            // 1. Guardar log del webhook
+            webhookLog = saveWebhookLog(eventType, payload, signature, deliveryId);
+
+            // 2. Parsear JSON
             JsonNode json = objectMapper.readTree(payload);
 
+            // 3. Procesar según el tipo de evento
             switch (eventType) {
                 case "installation" -> handleInstallationEvent(json);
                 case "installation_repositories" -> handleInstallationRepositoriesEvent(json);
@@ -87,9 +103,51 @@ public class WebhookService {
                 case "ping" -> handlePingEvent(json);
                 default -> log.info("Unhandled webhook event type: {}", eventType);
             }
+
+            // 4. Marcar como procesado
+            if (webhookLog != null) {
+                webhookLog.setProcessed(true);
+                webhookLog.setProcessedAt(OffsetDateTime.now());
+                webhookLogRepository.save(webhookLog);
+            }
+
         } catch (Exception e) {
             log.error("Error processing webhook payload: {}", e.getMessage(), e);
+
+            // Guardar error en el log
+            if (webhookLog != null) {
+                webhookLog.setProcessed(false);
+                webhookLog.setErrorMessage(e.getMessage());
+                webhookLogRepository.save(webhookLog);
+            }
+
             throw new RuntimeException("Failed to process webhook", e);
+        }
+    }
+
+    /**
+     * Guarda el webhook en la base de datos
+     */
+    private WebhookLog saveWebhookLog(String eventType, String payload, String signature, String deliveryId) {
+        try {
+            // Convertir payload a Map
+            Map<String, Object> payloadMap = objectMapper.readValue(
+                payload,
+                new TypeReference<Map<String, Object>>() {}
+            );
+
+            WebhookLog log = WebhookLog.builder()
+                    .eventType(eventType)
+                    .deliveryId(deliveryId)
+                    .requestPayload(payloadMap)
+                    .signature(signature)
+                    .processed(false)
+                    .build();
+
+            return webhookLogRepository.save(log);
+        } catch (Exception e) {
+            log.error("Error saving webhook log: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to save webhook log", e);
         }
     }
 
@@ -98,18 +156,39 @@ public class WebhookService {
      */
     private void handleInstallationEvent(JsonNode json) {
         String action = json.path("action").asText();
-        long installationId = json.path("installation").path("id").asLong();
-        String accountLogin = json.path("installation").path("account").path("login").asText();
+        JsonNode installationNode = json.path("installation");
+
+        long installationId = installationNode.path("id").asLong();
+        String accountLogin = installationNode.path("account").path("login").asText();
 
         log.info("Installation event - Action: {}, InstallationId: {}, Account: {}",
                 action, installationId, accountLogin);
 
-        if ("created".equals(action)) {
-            // TODO: Create or update Installation in DB
-            log.info("New installation created: {} for account: {}", installationId, accountLogin);
-        } else if ("deleted".equals(action)) {
-            // TODO: Mark installation as deleted in DB
-            log.info("Installation deleted: {} for account: {}", installationId, accountLogin);
+        try {
+            if ("created".equals(action)) {
+                // Convertir JsonNode a Map
+                Map<String, Object> installationData = objectMapper.convertValue(
+                    installationNode,
+                    new TypeReference<Map<String, Object>>() {}
+                );
+
+                // Crear o actualizar instalación en BD
+                installationService.createOrUpdateFromGitHub(installationData);
+                log.info("Installation saved: {} for account: {}", installationId, accountLogin);
+
+            } else if ("deleted".equals(action)) {
+                // Eliminar instalación
+                installationService.delete(installationId);
+                log.info("Installation deleted: {} for account: {}", installationId, accountLogin);
+
+            } else if ("suspend".equals(action)) {
+                // Marcar como suspendida
+                installationService.suspend(installationId);
+                log.info("Installation suspended: {} for account: {}", installationId, accountLogin);
+            }
+        } catch (Exception e) {
+            log.error("Error handling installation event: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to handle installation event", e);
         }
     }
 

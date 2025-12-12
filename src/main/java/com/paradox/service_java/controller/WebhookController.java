@@ -68,7 +68,7 @@ public class WebhookController {
             }
 
             // Process webhook event
-            webhookService.processWebhook(eventType, payload);
+            webhookService.processWebhook(eventType, payload, signature, deliveryId);
 
             log.info("Successfully processed webhook - Event: {}, Delivery: {}", eventType, deliveryId);
             return ResponseEntity.ok(Map.of("status", "success"));

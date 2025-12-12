@@ -34,4 +34,11 @@ public class InstallationTokenService {
         }
         return (String) response.get("token");
     }
+
+    /**
+     * Alias para createInstallationToken - obtiene token de instalación
+     */
+    public String getInstallationToken(Long installationId) {
+        return createInstallationToken(installationId);
+    }
 }
