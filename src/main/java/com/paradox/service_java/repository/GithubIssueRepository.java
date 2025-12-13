@@ -40,14 +40,16 @@ public interface GithubIssueRepository extends JpaRepository<GithubIssue, UUID> 
 
     /**
      * Buscar issues que contengan un label específico
+     * Usa query nativa para soportar arrays de PostgreSQL
      */
-    @Query("SELECT gi FROM GithubIssue gi WHERE :label = ANY(gi.labels)")
+    @Query(value = "SELECT * FROM github_issues WHERE :label = ANY(labels)", nativeQuery = true)
     List<GithubIssue> findByLabelsContaining(@Param("label") String label);
 
     /**
      * Buscar issues que contengan un assignee específico
+     * Usa query nativa para soportar arrays de PostgreSQL
      */
-    @Query("SELECT gi FROM GithubIssue gi WHERE :assignee = ANY(gi.assignees)")
+    @Query(value = "SELECT * FROM github_issues WHERE :assignee = ANY(assignees)", nativeQuery = true)
     List<GithubIssue> findByAssigneesContaining(@Param("assignee") String assignee);
 
     /**
