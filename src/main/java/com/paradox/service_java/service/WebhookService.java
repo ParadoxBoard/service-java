@@ -3,6 +3,7 @@ package com.paradox.service_java.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.paradox.service_java.model.Branch;
 import com.paradox.service_java.dto.webhook.IssueEventDTO;
 import com.paradox.service_java.dto.webhook.PullRequestEventDTO;
 import com.paradox.service_java.mapper.IssueMapper;
@@ -29,6 +30,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Service to handle GitHub webhook events
@@ -45,6 +47,8 @@ public class WebhookService {
     private final RepositoryRepository repositoryRepository;
     private final PullRequestRepository pullRequestRepository;
     private final GithubIssueRepository githubIssueRepository;
+    private final BranchService branchService;
+    private final CommitService commitService;
 
     // Mappers para conversión de DTOs (DEV B)
     private final PullRequestMapper pullRequestMapper;
@@ -116,6 +120,8 @@ public class WebhookService {
                 case "installation" -> handleInstallationEvent(json);
                 case "installation_repositories" -> handleInstallationRepositoriesEvent(json);
                 case "push" -> handlePushEvent(json);
+                case "create" -> handleCreateEvent(json);
+                case "delete" -> handleDeleteEvent(json);
                 case "pull_request" -> handlePullRequestEvent(json);
                 case "issues" -> handleIssuesEvent(json);
                 case "ping" -> handlePingEvent(json);
@@ -233,21 +239,203 @@ public class WebhookService {
      * Handle push events
      */
     private void handlePushEvent(JsonNode json) {
-        String ref = json.path("ref").asText();
-        String repoFullName = json.path("repository").path("full_name").asText();
-        int commitCount = json.path("commits").size();
+        try {
+            String ref = json.path("ref").asText(); // refs/heads/main
+            String repoFullName = json.path("repository").path("full_name").asText();
+            Long githubRepoId = json.path("repository").path("id").asLong();
+            JsonNode commits = json.path("commits");
+            int commitCount = commits.size();
 
-        log.info("Push event - Repo: {}, Ref: {}, Commits: {}", repoFullName, ref, commitCount);
+            log.info("Push event - Repo: {}, Ref: {}, Commits: {}", repoFullName, ref, commitCount);
 
-        // TODO: Process push event and update boards/tasks
-        // 1. Find repo in DB
-        // 2. Find associated boards
-        // 3. Update tasks based on commit messages
+            // Extraer nombre del branch del ref
+            String branchName = ref.replace("refs/heads/", "");
+
+            // 1. Buscar repositorio en BD
+            Optional<Repository> repoOpt = repositoryRepository.findByGithubRepoId(githubRepoId);
+            if (repoOpt.isEmpty()) {
+                log.warn("Repository not found in DB: {} ({})", repoFullName, githubRepoId);
+                return;
+            }
+
+            Repository repository = repoOpt.get();
+
+            // 2. Obtener o crear branch
+            JsonNode headCommitNode = json.path("head_commit");
+            String headSha = headCommitNode.path("id").asText();
+            String headMessage = headCommitNode.path("message").asText();
+            String headAuthor = headCommitNode.path("author").path("name").asText();
+            OffsetDateTime headDate = parseTimestamp(headCommitNode.path("timestamp").asText());
+
+            Branch branch = branchService.createOrUpdate(
+                    repository, branchName, headSha, headMessage, headAuthor, headDate
+            );
+
+            // 3. Procesar cada commit del push
+            int savedCount = 0;
+            for (JsonNode commitNode : commits) {
+                try {
+                    String sha = commitNode.path("id").asText();
+                    String message = commitNode.path("message").asText();
+                    String treeSha = commitNode.path("tree_id").asText();
+                    String url = commitNode.path("url").asText();
+
+                    // Author info
+                    JsonNode authorNode = commitNode.path("author");
+                    String authorName = authorNode.path("name").asText();
+                    String authorEmail = authorNode.path("email").asText();
+                    String authorLogin = authorNode.path("username").asText();
+                    OffsetDateTime authorDate = parseTimestamp(commitNode.path("timestamp").asText());
+
+                    // Stats (pueden no estar disponibles en push webhook)
+                    Integer additions = commitNode.has("added") ? commitNode.path("added").size() : null;
+                    Integer deletions = commitNode.has("removed") ? commitNode.path("removed").size() : null;
+                    Integer modified = commitNode.has("modified") ? commitNode.path("modified").size() : null;
+
+                    Integer changedFiles = 0;
+                    if (additions != null) changedFiles += additions;
+                    if (deletions != null) changedFiles += deletions;
+                    if (modified != null) changedFiles += modified;
+
+                    // Parent commits
+                    List<String> parentShas = new ArrayList<>();
+                    if (commitNode.has("parents")) {
+                        commitNode.path("parents").forEach(parent ->
+                                parentShas.add(parent.asText()));
+                    }
+
+                    // Crear commit si no existe
+                    commitService.createIfNotExists(
+                            repository, branch,
+                            sha, message,
+                            authorName, authorEmail, authorLogin,
+                            authorDate,
+                            treeSha, parentShas,
+                            additions, deletions, changedFiles,
+                            url
+                    );
+
+                    savedCount++;
+
+                } catch (Exception e) {
+                    log.error("Error processing individual commit: {}", e.getMessage(), e);
+                }
+            }
+
+            log.info("Push event processed: {} commits saved/updated in branch {} of repo {}",
+                    savedCount, branchName, repoFullName);
+
+        } catch (Exception e) {
+            log.error("Error handling push event: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to handle push event", e);
+        }
+    }
+
+    /**
+     * Parse timestamp from GitHub ISO 8601 format
+     */
+    private OffsetDateTime parseTimestamp(String timestamp) {
+        try {
+            if (timestamp == null || timestamp.isEmpty()) {
+                return OffsetDateTime.now();
+            }
+            return OffsetDateTime.parse(timestamp);
+        } catch (Exception e) {
+            log.warn("Failed to parse timestamp: {}, using current time", timestamp);
+            return OffsetDateTime.now();
+        }
+    }
+
+    /**
+     * Handle create events (branch/tag creation)
+     */
+    private void handleCreateEvent(JsonNode json) {
+        try {
+            String refType = json.path("ref_type").asText(); // "branch" or "tag"
+            String ref = json.path("ref").asText(); // branch/tag name
+            String repoFullName = json.path("repository").path("full_name").asText();
+            Long githubRepoId = json.path("repository").path("id").asLong();
+
+            log.info("Create event - Repo: {}, Type: {}, Ref: {}", repoFullName, refType, ref);
+
+            // Solo procesar si es un branch (ignorar tags por ahora)
+            if (!"branch".equals(refType)) {
+                log.debug("Ignoring create event for non-branch ref type: {}", refType);
+                return;
+            }
+
+            // Buscar repositorio en BD
+            Optional<Repository> repoOpt = repositoryRepository.findByGithubRepoId(githubRepoId);
+            if (repoOpt.isEmpty()) {
+                log.warn("Repository not found in DB: {} ({})", repoFullName, githubRepoId);
+                return;
+            }
+
+            Repository repository = repoOpt.get();
+
+            // Obtener info del sender (quien creó el branch)
+            JsonNode senderNode = json.path("sender");
+            String senderLogin = senderNode.path("login").asText();
+
+            // Crear branch en BD
+            String masterHeadSha = json.path("master_branch").asText();
+            branchService.createOrUpdate(
+                    repository,
+                    ref,
+                    masterHeadSha,
+                    "Branch created via webhook",
+                    senderLogin,
+                    OffsetDateTime.now()
+            );
+
+            log.info("Branch created: {} in repo {}", ref, repoFullName);
+
+        } catch (Exception e) {
+            log.error("Error handling create event: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to handle create event", e);
+        }
+    }
+
+    /**
+     * Handle delete events (branch/tag deletion)
+     */
+    private void handleDeleteEvent(JsonNode json) {
+        try {
+            String refType = json.path("ref_type").asText(); // "branch" or "tag"
+            String ref = json.path("ref").asText(); // branch/tag name
+            String repoFullName = json.path("repository").path("full_name").asText();
+            Long githubRepoId = json.path("repository").path("id").asLong();
+
+            log.info("Delete event - Repo: {}, Type: {}, Ref: {}", repoFullName, refType, ref);
+
+            // Solo procesar si es un branch (ignorar tags por ahora)
+            if (!"branch".equals(refType)) {
+                log.debug("Ignoring delete event for non-branch ref type: {}", refType);
+                return;
+            }
+
+            // Buscar repositorio en BD
+            Optional<Repository> repoOpt = repositoryRepository.findByGithubRepoId(githubRepoId);
+            if (repoOpt.isEmpty()) {
+                log.warn("Repository not found in DB: {} ({})", repoFullName, githubRepoId);
+                return;
+            }
+
+            Repository repository = repoOpt.get();
+
+            // Eliminar branch de BD
+            branchService.deleteBranch(repository.getId(), ref);
+
+            log.info("Branch deleted: {} from repo {}", ref, repoFullName);
+
+        } catch (Exception e) {
+            log.error("Error handling delete event: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to handle delete event", e);
+        }
     }
 
     /**
      * Handle pull request events
-     * Refactorizado por DEV B (Isabella) para usar PullRequestMapper
      */
     private void handlePullRequestEvent(JsonNode json) {
         String action = json.path("action").asText();
@@ -315,7 +503,6 @@ public class WebhookService {
 
     /**
      * Handle issues events
-     * Refactorizado por DEV B (Isabella) para usar IssueMapper
      */
     private void handleIssuesEvent(JsonNode json) {
         String action = json.path("action").asText();
@@ -370,7 +557,7 @@ public class WebhookService {
             // Guardar en BD
             githubIssueRepository.save(githubIssue);
             log.info("GitHub issue saved/updated: Issue #{} in repo {} - Action: {}, State: {}",
-                    issueNumber, repoFullName, action, githubIssue.getState());
+                    issueNumber, repoFullName, action, state);
 
         } catch (Exception e) {
             log.error("Error handling issues event: {}", e.getMessage(), e);
