@@ -14,8 +14,8 @@ services:
       - "8080:8080"
     restart: always
     networks:
-      - app_net
+      - paradox-paradox-network
 
 networks:
-  app_net:
-    external: false
+  paradox-paradox-network:
+    external: true
