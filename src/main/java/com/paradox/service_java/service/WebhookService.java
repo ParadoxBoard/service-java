@@ -28,7 +28,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -557,7 +559,7 @@ public class WebhookService {
             // Guardar en BD
             githubIssueRepository.save(githubIssue);
             log.info("GitHub issue saved/updated: Issue #{} in repo {} - Action: {}, State: {}",
-                    issueNumber, repoFullName, action, state);
+                    issueNumber, repoFullName, action, githubIssue.getState());
 
         } catch (Exception e) {
             log.error("Error handling issues event: {}", e.getMessage(), e);
