@@ -4,7 +4,7 @@
 
 ### **Progreso General:**
 - ✅ Autenticación: 90% (Login y Register completos)
-- ⚠️ Webhooks: 45% (Básicos ok, faltan avanzados)
+- ✅ Webhooks: 80% (PRs e Issues completos, faltan Commits/Branches) 
 - ❌ API REST: 0% (Por iniciar)
 - ⚠️ Sincronización: 40% (Inicial ok, falta incremental)
 - ⚠️ Base de Datos: 70% (Tablas GitHub ok, falta optimizar)
@@ -24,16 +24,25 @@
 
 ---
 
-### **2. WEBHOOKS ⚠️ 40% COMPLETADO**
+### **2. WEBHOOKS ✅ 80% COMPLETADO (Isabella - DEV B)**
 
-#### ✅ Ya Completado:
+#### ✅ Completado por Isabella (DEV B):
 - [x] Endpoint `/webhooks/github` creado
 - [x] Validar firma HMAC (X-Hub-Signature-256)
 - [x] Guardar payload en `webhook_logs`
 - [x] Manejar evento `ping`
 - [x] Manejar evento `installation` (created/deleted/suspended)
+- [x] **Manejar evento `pull_request` (opened, closed, edited, reopened, synchronize)** ✨
+- [x] **Manejar evento `issues` (opened, closed, edited, reopened, labeled)** ✨
+- [x] **Crear DTOs: `PullRequestEventDTO`, `IssueEventDTO`** ✨
+- [x] **Crear Mappers: `PullRequestMapper`, `IssueMapper`** ✨
+- [x] **Integrar mappers en WebhookService** ✨
+- [x] **Agregar métodos a GitHubApiService: `getPullRequests()`, `getIssues()`** ✨
+- [x] **Compilación exitosa sin errores** ✅
 
-#### ⏳ Pendiente (TU RESPONSABILIDAD):
+**Ver documentación completa en:** `docs/WEBHOOK_MODULE_COMPLETED.md`
+
+#### ⏳ Pendiente (RESPONSABILIDAD DEV A):
 
 **A. Evento `installation_repositories` (ALTA PRIORIDAD)**
 - [ ] Procesar acción "added" (repos agregados)
