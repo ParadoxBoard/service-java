@@ -39,16 +39,16 @@ public interface GithubIssueRepository extends JpaRepository<GithubIssue, UUID> 
     List<GithubIssue> findByUserLogin(String userLogin);
 
     /**
-     * Buscar issues que contengan un label específico
+     * Buscar issues que contengan un label específico (usando query nativa para arrays de PostgreSQL)
      */
-    @Query(value = "SELECT * FROM github_issues WHERE :label = ANY(labels)", nativeQuery = true)
-    List<GithubIssue> findByLabelsContaining(@Param("label") String label);
+    @Query(value = "SELECT i.* FROM github_issues i WHERE :label = ANY(i.labels)", nativeQuery = true)
+    List<GithubIssue> findIssuesByLabel(@Param("label") String label);
 
     /**
-     * Buscar issues que contengan un assignee específico
+     * Buscar issues que contengan un assignee específico (usando query nativa para arrays de PostgreSQL)
      */
-    @Query(value = "SELECT * FROM github_issues WHERE :assignee = ANY(assignees)", nativeQuery = true)
-    List<GithubIssue> findByAssigneesContaining(@Param("assignee") String assignee);
+    @Query(value = "SELECT i.* FROM github_issues i WHERE :assignee = ANY(i.assignees)", nativeQuery = true)
+    List<GithubIssue> findIssuesByAssignee(@Param("assignee") String assignee);
 
     /**
      * Verificar si existe issue
