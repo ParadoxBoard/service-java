@@ -3,6 +3,10 @@ package com.paradox.service_java.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.paradox.service_java.dto.webhook.IssueEventDTO;
+import com.paradox.service_java.dto.webhook.PullRequestEventDTO;
+import com.paradox.service_java.mapper.IssueMapper;
+import com.paradox.service_java.mapper.PullRequestMapper;
 import com.paradox.service_java.model.GithubIssue;
 import com.paradox.service_java.model.PullRequest;
 import com.paradox.service_java.model.Repository;
@@ -23,13 +27,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Map;
 
 /**
  * Service to handle GitHub webhook events
+ * Refactorizado por DEV B (Isabella) para usar Mappers y DTOs
  */
 @Slf4j
 @Service
@@ -42,6 +45,10 @@ public class WebhookService {
     private final RepositoryRepository repositoryRepository;
     private final PullRequestRepository pullRequestRepository;
     private final GithubIssueRepository githubIssueRepository;
+
+    // Mappers para conversión de DTOs (DEV B)
+    private final PullRequestMapper pullRequestMapper;
+    private final IssueMapper issueMapper;
 
     @Value("${webhook.secret:}")
     private String webhookSecret;
@@ -240,13 +247,13 @@ public class WebhookService {
 
     /**
      * Handle pull request events
+     * Refactorizado por DEV B (Isabella) para usar PullRequestMapper
      */
     private void handlePullRequestEvent(JsonNode json) {
         String action = json.path("action").asText();
         int prNumber = json.path("number").asInt();
         String repoFullName = json.path("repository").path("full_name").asText();
-        JsonNode prNode = json.path("pull_request");
-        String prTitle = prNode.path("title").asText();
+        String prTitle = json.path("pull_request").path("title").asText();
 
         log.info("Pull request event - Repo: {}, PR: #{}, Action: {}, Title: {}",
                 repoFullName, prNumber, action, prTitle);
@@ -256,105 +263,49 @@ public class WebhookService {
             Repository repository = repositoryRepository.findByFullName(repoFullName)
                     .orElseThrow(() -> new RuntimeException("Repository not found: " + repoFullName));
 
-            // Extraer datos del PR del payload
-            Long githubPrId = prNode.path("id").asLong();
-            String nodeId = prNode.path("node_id").asText();
-            String state = prNode.path("state").asText();
-            String body = prNode.path("body").asText(null);
-
-            JsonNode userNode = prNode.path("user");
-            String userLogin = userNode.path("login").asText();
-            Long userId = userNode.path("id").asLong();
-
-            JsonNode headNode = prNode.path("head");
-            String headRef = headNode.path("ref").asText();
-            String headSha = headNode.path("sha").asText();
-
-            JsonNode baseNode = prNode.path("base");
-            String baseRef = baseNode.path("ref").asText();
-            String baseSha = baseNode.path("sha").asText();
-
-            Boolean draft = prNode.path("draft").asBoolean(false);
-            Boolean merged = prNode.path("merged").asBoolean(false);
-            Boolean mergeable = prNode.has("mergeable") && !prNode.path("mergeable").isNull()
-                    ? prNode.path("mergeable").asBoolean()
-                    : null;
-
-            String mergedBy = prNode.has("merged_by") && !prNode.path("merged_by").isNull()
-                    ? prNode.path("merged_by").path("login").asText()
-                    : null;
-
-            OffsetDateTime mergedAt = prNode.has("merged_at") && !prNode.path("merged_at").isNull()
-                    ? OffsetDateTime.parse(prNode.path("merged_at").asText())
-                    : null;
-
-            OffsetDateTime closedAt = prNode.has("closed_at") && !prNode.path("closed_at").isNull()
-                    ? OffsetDateTime.parse(prNode.path("closed_at").asText())
-                    : null;
-
-            String htmlUrl = prNode.path("html_url").asText();
-
-            // Buscar o crear PR en BD
+            // Opción 1: Usar mapper con JsonNode (más directo)
             PullRequest pullRequest = pullRequestRepository.findByRepoIdAndNumber(repository.getId(), prNumber)
-                    .orElse(PullRequest.builder()
-                            .repo(repository)
-                            .number(prNumber)
-                            .build());
+                    .orElse(null);
 
-            // Actualizar campos
-            pullRequest.setGithubPrId(githubPrId);
-            pullRequest.setNodeId(nodeId);
-            pullRequest.setTitle(prTitle);
-            pullRequest.setBody(body);
-            pullRequest.setUserLogin(userLogin);
-            pullRequest.setUserId(userId);
-            pullRequest.setHeadRef(headRef);
-            pullRequest.setHeadSha(headSha);
-            pullRequest.setBaseRef(baseRef);
-            pullRequest.setBaseSha(baseSha);
-            pullRequest.setDraft(draft);
-            pullRequest.setMergeable(mergeable);
-            pullRequest.setHtmlUrl(htmlUrl);
-
-            // Actualizar estado según la acción
-            switch (action) {
-                case "opened":
-                case "reopened":
-                    pullRequest.setState("open");
-                    pullRequest.setMerged(false);
-                    break;
-                case "closed":
-                    if (merged) {
-                        pullRequest.setState("merged");
-                        pullRequest.setMerged(true);
-                        pullRequest.setMergedBy(mergedBy);
-                        pullRequest.setMergedAt(mergedAt);
-                    } else {
-                        pullRequest.setState("closed");
-                        pullRequest.setMerged(false);
-                    }
-                    pullRequest.setClosedAt(closedAt);
-                    break;
-                case "synchronize":
-                    // Actualizar commits (nuevo push al PR)
-                    pullRequest.setHeadSha(headSha);
-                    break;
-                default:
-                    // Para otras acciones, mantener estado actual
-                    pullRequest.setState(state);
-                    pullRequest.setMerged(merged);
-                    if (merged) {
-                        pullRequest.setMergedBy(mergedBy);
-                        pullRequest.setMergedAt(mergedAt);
-                    }
-                    if (closedAt != null) {
-                        pullRequest.setClosedAt(closedAt);
-                    }
+            if (pullRequest == null) {
+                // Crear nuevo PR usando el mapper
+                pullRequest = pullRequestMapper.fromJsonNode(json, repository);
+                log.info("Creating new Pull Request #{} in repo {}", prNumber, repoFullName);
+            } else {
+                // Actualizar PR existente - Convertir a DTO y usar mapper
+                try {
+                    PullRequestEventDTO dto = objectMapper.treeToValue(json, PullRequestEventDTO.class);
+                    pullRequestMapper.updateEntity(pullRequest, dto);
+                    log.info("Updating existing Pull Request #{} in repo {}", prNumber, repoFullName);
+                } catch (Exception e) {
+                    // Fallback: usar método directo con JsonNode
+                    log.warn("Failed to convert to DTO, using direct mapping: {}", e.getMessage());
+                    PullRequest updatedPr = pullRequestMapper.fromJsonNode(json, repository);
+                    pullRequest.setGithubPrId(updatedPr.getGithubPrId());
+                    pullRequest.setNodeId(updatedPr.getNodeId());
+                    pullRequest.setState(updatedPr.getState());
+                    pullRequest.setTitle(updatedPr.getTitle());
+                    pullRequest.setBody(updatedPr.getBody());
+                    pullRequest.setUserLogin(updatedPr.getUserLogin());
+                    pullRequest.setUserId(updatedPr.getUserId());
+                    pullRequest.setHeadRef(updatedPr.getHeadRef());
+                    pullRequest.setHeadSha(updatedPr.getHeadSha());
+                    pullRequest.setBaseRef(updatedPr.getBaseRef());
+                    pullRequest.setBaseSha(updatedPr.getBaseSha());
+                    pullRequest.setDraft(updatedPr.getDraft());
+                    pullRequest.setMerged(updatedPr.getMerged());
+                    pullRequest.setMergeable(updatedPr.getMergeable());
+                    pullRequest.setMergedBy(updatedPr.getMergedBy());
+                    pullRequest.setMergedAt(updatedPr.getMergedAt());
+                    pullRequest.setClosedAt(updatedPr.getClosedAt());
+                    pullRequest.setHtmlUrl(updatedPr.getHtmlUrl());
+                }
             }
 
             // Guardar en BD
             pullRequestRepository.save(pullRequest);
-            log.info("Pull request saved/updated: PR #{} in repo {} - Action: {}", prNumber, repoFullName, action);
+            log.info("Pull request saved/updated: PR #{} in repo {} - Action: {}, State: {}",
+                    prNumber, repoFullName, action, pullRequest.getState());
 
         } catch (Exception e) {
             log.error("Error handling pull request event: {}", e.getMessage(), e);
@@ -364,13 +315,13 @@ public class WebhookService {
 
     /**
      * Handle issues events
+     * Refactorizado por DEV B (Isabella) para usar IssueMapper
      */
     private void handleIssuesEvent(JsonNode json) {
         String action = json.path("action").asText();
-        JsonNode issueNode = json.path("issue");
-        int issueNumber = issueNode.path("number").asInt();
+        int issueNumber = json.path("issue").path("number").asInt();
         String repoFullName = json.path("repository").path("full_name").asText();
-        String issueTitle = issueNode.path("title").asText();
+        String issueTitle = json.path("issue").path("title").asText();
 
         log.info("Issues event - Repo: {}, Issue: #{}, Action: {}, Title: {}",
                 repoFullName, issueNumber, action, issueTitle);
@@ -380,74 +331,46 @@ public class WebhookService {
             Repository repository = repositoryRepository.findByFullName(repoFullName)
                     .orElseThrow(() -> new RuntimeException("Repository not found: " + repoFullName));
 
-            // Extraer datos del issue del payload
-            Long githubIssueId = issueNode.path("id").asLong();
-            String nodeId = issueNode.path("node_id").asText();
-            String state = issueNode.path("state").asText();
-            String body = issueNode.path("body").asText(null);
-
-            JsonNode userNode = issueNode.path("user");
-            String userLogin = userNode.path("login").asText();
-            Long userId = userNode.path("id").asLong();
-
-            // Extraer labels
-            List<String> labels = new java.util.ArrayList<>();
-            JsonNode labelsNode = issueNode.path("labels");
-            if (labelsNode.isArray()) {
-                for (JsonNode labelNode : labelsNode) {
-                    labels.add(labelNode.path("name").asText());
-                }
-            }
-
-            // Extraer assignees
-            List<String> assignees = new java.util.ArrayList<>();
-            JsonNode assigneesNode = issueNode.path("assignees");
-            if (assigneesNode.isArray()) {
-                for (JsonNode assigneeNode : assigneesNode) {
-                    assignees.add(assigneeNode.path("login").asText());
-                }
-            }
-
-            String milestone = issueNode.has("milestone") && !issueNode.path("milestone").isNull()
-                    ? issueNode.path("milestone").path("title").asText()
-                    : null;
-
-            Boolean locked = issueNode.path("locked").asBoolean(false);
-            Integer commentsCount = issueNode.path("comments").asInt(0);
-
-            OffsetDateTime closedAt = issueNode.has("closed_at") && !issueNode.path("closed_at").isNull()
-                    ? OffsetDateTime.parse(issueNode.path("closed_at").asText())
-                    : null;
-
-            String htmlUrl = issueNode.path("html_url").asText();
-
-            // Buscar o crear issue en BD
+            // Buscar o crear issue en BD usando el mapper
             GithubIssue githubIssue = githubIssueRepository.findByRepoIdAndNumber(repository.getId(), issueNumber)
-                    .orElse(GithubIssue.builder()
-                            .repo(repository)
-                            .number(issueNumber)
-                            .build());
+                    .orElse(null);
 
-            // Actualizar campos
-            githubIssue.setGithubIssueId(githubIssueId);
-            githubIssue.setNodeId(nodeId);
-            githubIssue.setState(state);
-            githubIssue.setTitle(issueTitle);
-            githubIssue.setBody(body);
-            githubIssue.setUserLogin(userLogin);
-            githubIssue.setUserId(userId);
-            githubIssue.setLabels(labels);
-            githubIssue.setAssignees(assignees);
-            githubIssue.setMilestone(milestone);
-            githubIssue.setLocked(locked);
-            githubIssue.setCommentsCount(commentsCount);
-            githubIssue.setClosedAt(closedAt);
-            githubIssue.setHtmlUrl(htmlUrl);
+            if (githubIssue == null) {
+                // Crear nuevo issue usando el mapper
+                githubIssue = issueMapper.fromJsonNode(json, repository);
+                log.info("Creating new GitHub Issue #{} in repo {}", issueNumber, repoFullName);
+            } else {
+                // Actualizar issue existente - Convertir a DTO y usar mapper
+                try {
+                    IssueEventDTO dto = objectMapper.treeToValue(json, IssueEventDTO.class);
+                    issueMapper.updateEntity(githubIssue, dto);
+                    log.info("Updating existing GitHub Issue #{} in repo {} - Action: {}",
+                            issueNumber, repoFullName, action);
+                } catch (Exception e) {
+                    // Fallback: usar método directo con JsonNode
+                    log.warn("Failed to convert to DTO, using direct mapping: {}", e.getMessage());
+                    GithubIssue updatedIssue = issueMapper.fromJsonNode(json, repository);
+                    githubIssue.setGithubIssueId(updatedIssue.getGithubIssueId());
+                    githubIssue.setNodeId(updatedIssue.getNodeId());
+                    githubIssue.setState(updatedIssue.getState());
+                    githubIssue.setTitle(updatedIssue.getTitle());
+                    githubIssue.setBody(updatedIssue.getBody());
+                    githubIssue.setUserLogin(updatedIssue.getUserLogin());
+                    githubIssue.setUserId(updatedIssue.getUserId());
+                    githubIssue.setLabels(updatedIssue.getLabels());
+                    githubIssue.setAssignees(updatedIssue.getAssignees());
+                    githubIssue.setMilestone(updatedIssue.getMilestone());
+                    githubIssue.setLocked(updatedIssue.getLocked());
+                    githubIssue.setCommentsCount(updatedIssue.getCommentsCount());
+                    githubIssue.setClosedAt(updatedIssue.getClosedAt());
+                    githubIssue.setHtmlUrl(updatedIssue.getHtmlUrl());
+                }
+            }
 
             // Guardar en BD
             githubIssueRepository.save(githubIssue);
             log.info("GitHub issue saved/updated: Issue #{} in repo {} - Action: {}, State: {}",
-                    issueNumber, repoFullName, action, state);
+                    issueNumber, repoFullName, action, githubIssue.getState());
 
         } catch (Exception e) {
             log.error("Error handling issues event: {}", e.getMessage(), e);
