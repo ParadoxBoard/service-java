@@ -32,14 +32,16 @@ public class SecurityConfig {
                     "/swagger-resources/**",
                     "/webjars/**"
                 ).permitAll()
-                // Auth endpoints
-                .requestMatchers("/auth/**").permitAll()
-                // Webhook endpoints
-                .requestMatchers("/webhooks/**").permitAll()
-                // User endpoints (temporarily public for testing, should be protected)
-                .requestMatchers("/api/users/**").permitAll()
-                // All other requests require authentication
-                .anyRequest().authenticated()
+                    // Actuator endpoints (health check, metrics)
+                    .requestMatchers("/actuator/**").permitAll()
+                    // Auth endpoints
+                    .requestMatchers("/auth/**").permitAll()
+                    // Webhook endpoints
+                    .requestMatchers("/webhooks/**").permitAll()
+                    // User endpoints (temporarily public for testing, should be protected)
+                    .requestMatchers("/api/users/**").permitAll()
+                    // All other requests require authentication
+                    .anyRequest().authenticated()
             );
         
         return http.build();
