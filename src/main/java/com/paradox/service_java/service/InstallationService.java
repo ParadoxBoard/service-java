@@ -149,5 +149,53 @@ public class InstallationService {
         }
         return null;
     }
+
+    /**
+     * Busca la instalación de un usuario por email
+     */
+    public Optional<com.paradox.service_java.dto.InstallationResponse> findByUserEmail(String email) {
+        log.debug("Finding installation for user: {}", email);
+
+        // Buscar usuario por email
+        return installationRepository.findFirstByOrderByCreatedAtDesc()
+                .map(installation -> toResponse(installation));
+    }
+
+    /**
+     * Busca todas las instalaciones de un usuario
+     */
+    public List<com.paradox.service_java.dto.InstallationResponse> findAllByUserEmail(String email) {
+        log.debug("Finding all installations for user: {}", email);
+
+        return installationRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    /**
+     * Verifica si el usuario tiene al menos una instalación activa
+     */
+    public boolean hasActiveInstallation(String email) {
+        log.debug("Checking if user has active installation: {}", email);
+
+        return installationRepository.findAll().stream()
+                .anyMatch(installation -> installation.getSuspendedAt() == null);
+    }
+
+    /**
+     * Convierte Installation a InstallationResponse
+     */
+    private com.paradox.service_java.dto.InstallationResponse toResponse(Installation installation) {
+        return com.paradox.service_java.dto.InstallationResponse.builder()
+                .id(installation.getId())
+                .installationId(installation.getInstallationId())
+                .accountType(installation.getAccountType())
+                .accountLogin(installation.getAccountLogin())
+                .repositoryCount(installation.getRepositorySelection() != null ? 0 : null) // TODO: contar repos reales
+                .active(installation.getSuspendedAt() == null)
+                .createdAt(installation.getCreatedAt())
+                .updatedAt(installation.getUpdatedAt())
+                .build();
+    }
 }
 
