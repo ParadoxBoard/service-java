@@ -53,6 +53,12 @@ public interface GithubIssueRepository extends JpaRepository<GithubIssue, UUID> 
     List<GithubIssue> findByAssigneesContaining(@Param("assignee") String assignee);
 
     /**
+     * Buscar issues por repo y label
+     */
+    @Query(value = "SELECT * FROM github_issues WHERE repo_id = CAST(:repoId AS uuid) AND :label = ANY(labels)", nativeQuery = true)
+    List<GithubIssue> findByRepoIdAndLabel(@Param("repoId") UUID repoId, @Param("label") String label);
+
+    /**
      * Verificar si existe issue
      */
     boolean existsByRepoIdAndNumber(UUID repoId, Integer number);

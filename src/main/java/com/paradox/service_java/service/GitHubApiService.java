@@ -106,4 +106,65 @@ public class GitHubApiService {
         headers.set("X-GitHub-Api-Version", "2022-11-28");
         return headers;
     }
+
+    /**
+     * Obtiene la configuración de protección de un branch
+     */
+    public Map<String, Object> getBranchProtection(String owner, String repo, String branch, String token) {
+        try {
+            return this.webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/repos/{owner}/{repo}/branches/{branch}/protection")
+                            .build(owner, repo, branch))
+                    .headers(h -> h.addAll(defaultInstallationHeaders(token)))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(MAP_REF)
+                    .block();
+        } catch (WebClientResponseException ex) {
+            if (ex.getStatusCode().value() == 404) {
+                // Branch no protegido
+                return Map.of("protected", false);
+            }
+            throw new IllegalStateException("Error fetching branch protection: " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Obtiene los archivos modificados en un commit
+     */
+    public Map<String, Object> getCommitFiles(String owner, String repo, String sha, String token) {
+        try {
+            return this.webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/repos/{owner}/{repo}/commits/{sha}")
+                            .build(owner, repo, sha))
+                    .headers(h -> h.addAll(defaultInstallationHeaders(token)))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(MAP_REF)
+                    .block();
+        } catch (WebClientResponseException ex) {
+            throw new IllegalStateException("Error fetching commit files: " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Obtiene los reviews de un Pull Request
+     */
+    public List<Map<String, Object>> getPullRequestReviews(String owner, String repo, Integer prNumber, String token) {
+        try {
+            return this.webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/repos/{owner}/{repo}/pulls/{pull_number}/reviews")
+                            .build(owner, repo, prNumber))
+                    .headers(h -> h.addAll(defaultInstallationHeaders(token)))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                    .block();
+        } catch (WebClientResponseException ex) {
+            throw new IllegalStateException("Error fetching PR reviews: " + ex.getMessage(), ex);
+        }
+    }
 }
