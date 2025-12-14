@@ -23,7 +23,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/repos")
-@Tag(name = "Repositories (Basic)", description = "Repository basic endpoints (DEV A)")
+@Tag(name = "Repositories", description = "Repository management and details operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class RepositoryController {

@@ -24,7 +24,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/commits")
-@Tag(name = "Commits (Basic)", description = "Commit basic endpoints (DEV A)")
+@Tag(name = "Commits", description = "Commit history and filtering operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class CommitController {

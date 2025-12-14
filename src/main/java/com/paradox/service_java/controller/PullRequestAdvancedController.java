@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/prs")
-@Tag(name = "Pull Requests (Advanced)", description = "Advanced pull request endpoints (DEV B)")
+@Tag(name = "Pull Requests", description = "Pull request filtering and review operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class PullRequestAdvancedController {

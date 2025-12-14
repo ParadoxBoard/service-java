@@ -25,7 +25,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/repos")
-@Tag(name = "Project Repositories", description = "Repository-project association endpoints (DEV B)")
+@Tag(name = "Project Repositories", description = "Repository and project association operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class ProjectRepoController {

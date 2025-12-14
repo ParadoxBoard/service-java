@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/api/repos")
-@Tag(name = "Repository Stats", description = "Repository statistics endpoints (DEV B)")
+@Tag(name = "Repository Stats", description = "Repository statistics and metrics operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class RepoStatsController {

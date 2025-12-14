@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/branches")
-@Tag(name = "Branches (Basic)", description = "Branch basic endpoints (DEV A)")
+@Tag(name = "Branches", description = "Branch management and commit history operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class BranchController {
