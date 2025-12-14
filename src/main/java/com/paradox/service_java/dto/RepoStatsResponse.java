@@ -1,29 +1,29 @@
 package com.paradox.service_java.dto;
-}
-    private Integer issuesOpen;
-    private Integer pullRequestsOpen;
-    private Integer commitsLast30Days;
-    private Map<String, Integer> reposByLanguage;
-    private Integer activeRepos;
-    private Integer archivedRepos;
-    private Integer privateRepos;
-    private Integer publicRepos;
-    private Integer totalRepos;
-public class RepoStatsResponse {
-@AllArgsConstructor
-@NoArgsConstructor
-@Builder
-@Data
- */
- * Responsabilidad: DEV B (Isabella)
- * DTO para estadísticas de repositorios
-/**
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.Map;
 
-import lombok.NoArgsConstructor;
-import lombok.Data;
-import lombok.Builder;
-import lombok.AllArgsConstructor;
-
+/**
+ * DTO para estadísticas de repositorios
+ * Responsabilidad: DEV B (Isabella)
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class RepoStatsResponse {
+    private Integer totalRepos;
+    private Integer publicRepos;
+    private Integer privateRepos;
+    private Integer archivedRepos;
+    private Integer activeRepos;
+    private Map<String, Integer> reposByLanguage;
+    private Integer commitsLast30Days;
+    private Integer pullRequestsOpen;
+    private Integer issuesOpen;
+}
 
