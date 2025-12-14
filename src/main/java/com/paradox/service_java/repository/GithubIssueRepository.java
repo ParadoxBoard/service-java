@@ -1,6 +1,8 @@
 package com.paradox.service_java.repository;
 
 import com.paradox.service_java.model.GithubIssue;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,6 +34,10 @@ public interface GithubIssueRepository extends JpaRepository<GithubIssue, UUID> 
      * Buscar issues por repo
      */
     List<GithubIssue> findByRepoId(UUID repoId);
+
+    Page<GithubIssue> findByRepoId(UUID repoId, Pageable pageable);
+
+    Page<GithubIssue> findByRepoIdAndState(UUID repoId, String state, Pageable pageable);
 
     /**
      * Buscar issues por autor
@@ -68,6 +74,8 @@ public interface GithubIssueRepository extends JpaRepository<GithubIssue, UUID> 
      */
     @Query("SELECT COUNT(gi) FROM GithubIssue gi WHERE gi.repo.id = :repoId AND gi.state = 'open'")
     Long countOpenIssuesByRepoId(@Param("repoId") UUID repoId);
+
+    Long countByRepoIdAndState(UUID repoId, String state);
 
     /**
      * Buscar issues por milestone
