@@ -15,5 +15,7 @@ public interface InstallationRepository extends JpaRepository<Installation, UUID
     Optional<Installation> findByAccountLogin(String accountLogin);
 
     boolean existsByInstallationId(Long installationId);
+
+    Optional<Installation> findFirstByOrderByCreatedAtDesc();
 }
 
