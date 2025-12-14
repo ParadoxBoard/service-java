@@ -21,7 +21,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/prs")
-@Tag(name = "Pull Requests (Basic)", description = "Pull Request basic endpoints (DEV A)")
+@Tag(name = "Pull Requests", description = "Pull request management and review operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class PullRequestController {

@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/github/issues")
-@Tag(name = "GitHub Issues (Advanced)", description = "Advanced GitHub issues endpoints (DEV B)")
+@Tag(name = "GitHub Issues", description = "Issue filtering and assignment operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class IssueAdvancedController {
