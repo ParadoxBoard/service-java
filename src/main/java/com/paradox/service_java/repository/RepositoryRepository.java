@@ -16,6 +16,8 @@ public interface RepositoryRepository extends JpaRepository<Repository, UUID> {
 
     List<Repository> findByInstallationId(UUID installationId);
 
+    List<Repository> findByInstallation_InstallationId(Long installationId);
+
     List<Repository> findByOwnerLogin(String ownerLogin);
 
     boolean existsByGithubRepoId(Long githubRepoId);

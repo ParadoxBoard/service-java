@@ -46,6 +46,13 @@ public interface CommitRepository extends JpaRepository<Commit, UUID> {
      */
     List<Commit> findByAuthorLoginOrderByAuthorDateDesc(String authorLogin);
 
+    Page<Commit> findByBranchIdAndAuthorLoginOrderByAuthorDateDesc(UUID branchId, String authorLogin, Pageable pageable);
+
+    Page<Commit> findByBranchIdAndAuthorLoginAndAuthorDateBetweenOrderByAuthorDateDesc(
+            UUID branchId, String authorLogin, OffsetDateTime from, OffsetDateTime to, Pageable pageable);
+
+    Page<Commit> findByRepositoryIdAndAuthorLoginOrderByAuthorDateDesc(UUID repositoryId, String authorLogin, Pageable pageable);
+
     /**
      * Obtener commits recientes de un repo (últimos N)
      */
@@ -68,6 +75,10 @@ public interface CommitRepository extends JpaRepository<Commit, UUID> {
      * Contar commits de un repositorio
      */
     long countByRepositoryId(UUID repositoryId);
+
+    long countByRepository_Id(UUID repositoryId);
+
+    Optional<com.paradox.service_java.model.Commit> findTopByRepository_IdOrderByAuthorDateDesc(UUID repositoryId);
 
     /**
      * Contar commits de un branch

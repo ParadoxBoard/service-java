@@ -54,6 +54,8 @@ public interface BranchRepository extends JpaRepository<Branch, UUID> {
      */
     long countByRepositoryId(UUID repositoryId);
 
+    long countByRepository_Id(UUID repositoryId);
+
     /**
      * Obtener branch por defecto (main o master)
      */
