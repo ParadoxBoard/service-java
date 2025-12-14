@@ -36,7 +36,6 @@ import java.util.Optional;
 
 /**
  * Service to handle GitHub webhook events
- * Refactorizado por DEV B (Isabella) para usar Mappers y DTOs
  */
 @Slf4j
 @Service
@@ -46,6 +45,7 @@ public class WebhookService {
     private final ObjectMapper objectMapper;
     private final WebhookLogRepository webhookLogRepository;
     private final InstallationService installationService;
+    private final com.paradox.service_java.repository.InstallationRepository installationRepository;
     private final RepositoryRepository repositoryRepository;
     private final PullRequestRepository pullRequestRepository;
     private final GithubIssueRepository githubIssueRepository;
@@ -220,20 +220,116 @@ public class WebhookService {
 
     /**
      * Handle installation_repositories events (added/removed)
+     * DEV A - Implementación completa
      */
     private void handleInstallationRepositoriesEvent(JsonNode json) {
-        String action = json.path("action").asText();
-        long installationId = json.path("installation").path("id").asLong();
+        try {
+            String action = json.path("action").asText();
+            long installationId = json.path("installation").path("id").asLong();
+            String repositorySelection = json.path("repository_selection").asText();
 
-        log.info("Installation repositories event - Action: {}, InstallationId: {}", action, installationId);
+            log.info("Installation repositories event - Action: {}, InstallationId: {}, Selection: {}",
+                    action, installationId, repositorySelection);
 
-        // TODO: Process repositories added or removed
-        if ("added".equals(action)) {
-            JsonNode addedRepos = json.path("repositories_added");
-            log.info("Repositories added: {}", addedRepos.size());
-        } else if ("removed".equals(action)) {
-            JsonNode removedRepos = json.path("repositories_removed");
-            log.info("Repositories removed: {}", removedRepos.size());
+            if ("added".equals(action)) {
+                // Procesar repositorios agregados
+                JsonNode addedRepos = json.path("repositories_added");
+                int addedCount = 0;
+
+                // Buscar la instalación en BD
+                Optional<com.paradox.service_java.model.Installation> installationOpt =
+                        installationRepository.findByInstallationId(installationId);
+
+                if (installationOpt.isEmpty()) {
+                    log.warn("Installation not found in DB: {}, cannot add repositories", installationId);
+                    return;
+                }
+
+                com.paradox.service_java.model.Installation installation = installationOpt.get();
+
+                for (JsonNode repoNode : addedRepos) {
+                    try {
+                        long githubRepoId = repoNode.path("id").asLong();
+                        String nodeId = repoNode.path("node_id").asText();
+                        String name = repoNode.path("name").asText();
+                        String fullName = repoNode.path("full_name").asText();
+                        boolean isPrivate = repoNode.path("private").asBoolean();
+
+                        // Verificar si el repo ya existe
+                        Optional<Repository> existingRepo = repositoryRepository.findByGithubRepoId(githubRepoId);
+
+                        if (existingRepo.isEmpty()) {
+                            // Crear nuevo repositorio
+                            Repository newRepo = Repository.builder()
+                                    .installation(installation)
+                                    .githubRepoId(githubRepoId)
+                                    .nodeId(nodeId)
+                                    .name(name)
+                                    .fullName(fullName)
+                                    .ownerLogin(fullName.split("/")[0])
+                                    .privateRepo(isPrivate)
+                                    .createdAt(OffsetDateTime.now())
+                                    .updatedAt(OffsetDateTime.now())
+                                    .build();
+
+                            repositoryRepository.save(newRepo);
+                            addedCount++;
+                            log.info("Repository added to installation: {} ({})", fullName, githubRepoId);
+
+                            // Trigger sincronización inicial del repo (opcional, puede ser costoso)
+                            // installationService.syncSingleRepository(installationId, githubRepoId);
+                        } else {
+                            log.debug("Repository already exists: {}, skipping", fullName);
+                        }
+
+                    } catch (Exception e) {
+                        log.error("Error processing added repository: {}", e.getMessage(), e);
+                    }
+                }
+
+                log.info("Installation repositories added: {} new repos synchronized", addedCount);
+
+            } else if ("removed".equals(action)) {
+                // Procesar repositorios removidos
+                JsonNode removedRepos = json.path("repositories_removed");
+                int removedCount = 0;
+
+                for (JsonNode repoNode : removedRepos) {
+                    try {
+                        long githubRepoId = repoNode.path("id").asLong();
+                        String fullName = repoNode.path("full_name").asText();
+
+                        // Buscar y eliminar (o marcar como inactivo) el repositorio
+                        Optional<Repository> repoOpt = repositoryRepository.findByGithubRepoId(githubRepoId);
+
+                        if (repoOpt.isPresent()) {
+                            Repository repo = repoOpt.get();
+
+                            // Opción A: Eliminar completamente (puede causar problemas de integridad)
+                            // repositoryRepository.delete(repo);
+
+                            // Opción B: Marcar como inactivo (recomendado)
+                            repo.setInstallation(null); // Desasociar de la instalación
+                            repo.setUpdatedAt(OffsetDateTime.now());
+                            repositoryRepository.save(repo);
+
+                            removedCount++;
+                            log.info("Repository removed from installation: {} ({})", fullName, githubRepoId);
+                        } else {
+                            log.warn("Repository to remove not found in DB: {} ({})", fullName, githubRepoId);
+                        }
+
+                    } catch (Exception e) {
+                        log.error("Error processing removed repository: {}", e.getMessage(), e);
+                    }
+                }
+
+                log.info("Installation repositories removed: {} repos unlinked", removedCount);
+            }
+
+        } catch (Exception e) {
+            log.error("Error handling installation_repositories event: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to handle installation_repositories event", e);
         }
     }
 
