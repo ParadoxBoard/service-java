@@ -1,21 +1,23 @@
 services:
-  spring:
+  service-java:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: service-java
     volumes:
-      - /home/deploy/configServiceJava/application.properties:/app/config/application.properties
+      - /home/deploy/configServiceJava/application.properties:/app/config/application.properties:ro
     environment:
       - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_CONFIG_LOCATION=file:/app/config/application.properties
     expose:
       - "8080"
     ports:
       - "8080:8080"
-    restart: always
+    restart: unless-stopped
     networks:
-      - paradox-paradox-network
+      - paradox-network
 
 networks:
-  paradox-paradox-network:
+  paradox-network:
+    name: paradox_paradox-network
     external: true
