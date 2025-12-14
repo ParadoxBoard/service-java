@@ -170,5 +170,4 @@ Todos los módulos están implementados:
 
 **Última actualización:** 14 Diciembre 2025  
 **Implementado por:** Adrian (Dev A)  
-**Tiempo de implementación:** ~3 horas
 
