@@ -19,5 +19,10 @@ public interface RepositoryRepository extends JpaRepository<Repository, UUID> {
     List<Repository> findByOwnerLogin(String ownerLogin);
 
     boolean existsByGithubRepoId(Long githubRepoId);
+
+    // Queries para estadísticas
+    long countByPrivateRepo(Boolean privateRepo);
+
+    long countByArchived(Boolean archived);
 }
 
