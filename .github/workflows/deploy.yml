@@ -46,12 +46,12 @@ jobs:
             docker rm ${{ secrets.APP_CONTAINER_NAME }} || true
 
             echo "Starting new container..."
-            docker run -d --name ${{ secrets.APP_CONTAINER_NAME }} \
-            --restart unless-stopped \
-            --network paradox_paradox-network \
-            -p ${{ secrets.APP_PORT }}:8080 \
-            -v /home/${{ secrets.VPS_USER }}/configServiceJava/application.properties:/app/config/application.properties:ro \
-            "$IMAGE"
+            CONTAINER_ID=$(docker run -d --name ${{ secrets.APP_CONTAINER_NAME }} \
+              --restart unless-stopped \
+              --network paradox_paradox-network \
+              -p ${{ secrets.APP_PORT }}:8080 \
+              -v /home/${{ secrets.VPS_USER }}/configServiceJava/application.properties:/app/config/application.properties:ro \
+              "$IMAGE")
 
             if [ -z "$CONTAINER_ID" ]; then
               echo "ERROR: docker run failed (no container id)" >&2
