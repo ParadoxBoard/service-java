@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/commits")
-@Tag(name = "Commits (Advanced)", description = "Advanced commit endpoints (DEV B)")
+@Tag(name = "Commits", description = "Commit operations and file changes")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class CommitAdvancedController {

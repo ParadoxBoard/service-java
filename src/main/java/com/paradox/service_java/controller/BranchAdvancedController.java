@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/branches")
-@Tag(name = "Branches (Advanced)", description = "Advanced branch endpoints (DEV B)")
+@Tag(name = "Branches", description = "Branch operations and protection rules")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class BranchAdvancedController {

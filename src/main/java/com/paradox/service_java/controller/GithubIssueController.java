@@ -21,7 +21,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/github/issues")
-@Tag(name = "GitHub Issues (Basic)", description = "GitHub issue basic endpoints (DEV A)")
+@Tag(name = "GitHub Issues", description = "Issue tracking and management operations")
 @SecurityRequirement(name = "bearer-jwt")
 @RequiredArgsConstructor
 public class GithubIssueController {
