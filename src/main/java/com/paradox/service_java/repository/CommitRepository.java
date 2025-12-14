@@ -73,5 +73,11 @@ public interface CommitRepository extends JpaRepository<Commit, UUID> {
      * Contar commits de un branch
      */
     long countByBranchId(UUID branchId);
+
+    /**
+     * Contar commits desde una fecha específica
+     */
+    @Query("SELECT COUNT(c) FROM Commit c WHERE c.authorDate >= :since")
+    long countCommitsSince(@Param("since") OffsetDateTime since);
 }
 
