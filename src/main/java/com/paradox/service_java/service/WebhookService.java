@@ -51,6 +51,7 @@ public class WebhookService {
     private final GithubIssueRepository githubIssueRepository;
     private final BranchService branchService;
     private final CommitService commitService;
+    private final CSharpNotificationService csharpNotificationService;
 
     // Mappers para conversión de DTOs (DEV B)
     private final PullRequestMapper pullRequestMapper;
@@ -413,6 +414,14 @@ public class WebhookService {
                             url
                     );
 
+                    // Notificar a C# Service
+                    csharpNotificationService.notifyCommitCreated(
+                            repository.getId().toString(),
+                            sha,
+                            message,
+                            authorLogin != null ? authorLogin : authorName
+                    );
+
                     savedCount++;
 
                 } catch (Exception e) {
@@ -487,6 +496,13 @@ public class WebhookService {
             );
 
             log.info("Branch created: {} in repo {}", ref, repoFullName);
+
+            // Notificar a C# Service
+            csharpNotificationService.notifyBranchCreated(
+                    repository.getId().toString(),
+                    ref,
+                    masterHeadSha
+            );
 
         } catch (Exception e) {
             log.error("Error handling create event: {}", e.getMessage(), e);
@@ -593,6 +609,14 @@ public class WebhookService {
             log.info("Pull request saved/updated: PR #{} in repo {} - Action: {}, State: {}",
                     prNumber, repoFullName, action, pullRequest.getState());
 
+            // Notificar a C# Service
+            csharpNotificationService.notifyPullRequestUpdated(
+                    repository.getId().toString(),
+                    prNumber,
+                    action,
+                    pullRequest.getState()
+            );
+
         } catch (Exception e) {
             log.error("Error handling pull request event: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to handle pull request event", e);
@@ -656,6 +680,14 @@ public class WebhookService {
             githubIssueRepository.save(githubIssue);
             log.info("GitHub issue saved/updated: Issue #{} in repo {} - Action: {}, State: {}",
                     issueNumber, repoFullName, action, githubIssue.getState());
+
+            // Notificar a C# Service
+            csharpNotificationService.notifyIssueUpdated(
+                    repository.getId().toString(),
+                    issueNumber,
+                    action,
+                    githubIssue.getState()
+            );
 
         } catch (Exception e) {
             log.error("Error handling issues event: {}", e.getMessage(), e);
