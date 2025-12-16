@@ -183,7 +183,7 @@ public class GithubOAuthService {
      */
     public String getAuthorizationUrl() {
         return String.format(
-                "https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=read:user user:email",
+                "https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=read:user%%20user:email",
                 clientId,
                 redirectUri
         );
