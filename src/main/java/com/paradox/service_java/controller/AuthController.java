@@ -20,10 +20,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.util.List;
@@ -47,6 +49,9 @@ public class AuthController {
     private final UserService userService;
     private final InstallationService installationService;
     private final SyncService syncService;
+
+    @Value("${frontend.url}")
+    private String frontendUrl;
 
     /**
      * Endpoint de login - Redirige al usuario a GitHub para autenticación
@@ -94,7 +99,13 @@ public class AuthController {
             AuthResponse response = authService.handleGithubCallback(code);
 
             // Redirigir al frontend con el token como parámetro
-            String redirectUrl = "/?token=" + response.getToken();
+            String redirectUrl = UriComponentsBuilder
+                    .fromHttpUrl(frontendUrl)
+                    .queryParam("token", response.getToken())
+                    .build()
+                    .toUriString();
+
+            log.info("Redirecting to frontend: {}", frontendUrl);
 
             return ResponseEntity
                     .status(HttpStatus.FOUND)
@@ -102,8 +113,14 @@ public class AuthController {
                     .build();
         } catch (Exception e) {
             log.error("Error processing GitHub callback: {}", e.getMessage(), e);
+
             // Redirigir al frontend con error
-            String redirectUrl = "/?error=" + e.getMessage();
+            String redirectUrl = UriComponentsBuilder
+                    .fromHttpUrl(frontendUrl)
+                    .queryParam("error", e.getMessage())
+                    .build()
+                    .toUriString();
+
             return ResponseEntity
                     .status(HttpStatus.FOUND)
                     .location(URI.create(redirectUrl))
