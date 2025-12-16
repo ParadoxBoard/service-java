@@ -72,19 +72,19 @@ public class AuthController {
 
     /**
      * Callback de GitHub OAuth - Recibe el código de autorización
+     * Redirige al frontend con el token como parámetro
      * GET /auth/github/callback?code=xxx
      */
     @Operation(summary = "GitHub OAuth callback",
-               description = "Handles GitHub OAuth callback and returns JWT token")
+               description = "Handles GitHub OAuth callback and redirects to frontend with JWT token")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Authentication successful",
-                    content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = "302", description = "Redirect to frontend with token"),
         @ApiResponse(responseCode = "400", description = "Missing or invalid code"),
         @ApiResponse(responseCode = "401", description = "GitHub authentication failed"),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     @GetMapping("/callback")
-    public ResponseEntity<AuthResponse> callback(
+    public ResponseEntity<Void> callback(
             @Parameter(description = "GitHub authorization code", required = true)
             @RequestParam("code") @NotBlank String code
     ) {
@@ -93,6 +93,46 @@ public class AuthController {
         try {
             AuthResponse response = authService.handleGithubCallback(code);
 
+            // Redirigir al frontend con el token como parámetro
+            String redirectUrl = "/?token=" + response.getToken();
+
+            return ResponseEntity
+                    .status(HttpStatus.FOUND)
+                    .location(URI.create(redirectUrl))
+                    .build();
+        } catch (Exception e) {
+            log.error("Error processing GitHub callback: {}", e.getMessage(), e);
+            // Redirigir al frontend con error
+            String redirectUrl = "/?error=" + e.getMessage();
+            return ResponseEntity
+                    .status(HttpStatus.FOUND)
+                    .location(URI.create(redirectUrl))
+                    .build();
+        }
+    }
+
+    /**
+     * Callback de GitHub OAuth (versión API) - Devuelve JSON
+     * GET /auth/github/callback/api?code=xxx
+     */
+    @Operation(summary = "GitHub OAuth callback API",
+               description = "Handles GitHub OAuth callback and returns JWT token as JSON")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Authentication successful",
+                    content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Missing or invalid code"),
+        @ApiResponse(responseCode = "401", description = "GitHub authentication failed"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @GetMapping("/callback/api")
+    public ResponseEntity<AuthResponse> callbackApi(
+            @Parameter(description = "GitHub authorization code", required = true)
+            @RequestParam("code") @NotBlank String code
+    ) {
+        log.info("Processing GitHub OAuth callback API with code");
+
+        try {
+            AuthResponse response = authService.handleGithubCallback(code);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error processing GitHub callback: {}", e.getMessage(), e);
