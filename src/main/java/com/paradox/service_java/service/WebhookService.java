@@ -200,8 +200,57 @@ public class WebhookService {
                 );
 
                 // Crear o actualizar instalación en BD
-                installationService.createOrUpdateFromGitHub(installationData);
+                com.paradox.service_java.model.Installation installation =
+                        installationService.createOrUpdateFromGitHub(installationData);
                 log.info("Installation saved: {} for account: {}", installationId, accountLogin);
+
+                // IMPORTANTE: Procesar repositorios que vienen en el payload de instalación
+                JsonNode repositoriesNode = json.path("repositories");
+                if (repositoriesNode.isArray() && repositoriesNode.size() > 0) {
+                    log.info("Processing {} repositories from installation event", repositoriesNode.size());
+                    int savedCount = 0;
+
+                    for (JsonNode repoNode : repositoriesNode) {
+                        try {
+                            long githubRepoId = repoNode.path("id").asLong();
+                            String nodeId = repoNode.path("node_id").asText();
+                            String name = repoNode.path("name").asText();
+                            String fullName = repoNode.path("full_name").asText();
+                            boolean isPrivate = repoNode.path("private").asBoolean(false);
+
+                            // Verificar si el repo ya existe
+                            Optional<Repository> existingRepo = repositoryRepository.findByGithubRepoId(githubRepoId);
+
+                            if (existingRepo.isEmpty()) {
+                                // Crear nuevo repositorio
+                                Repository newRepo = Repository.builder()
+                                        .installation(installation)
+                                        .githubRepoId(githubRepoId)
+                                        .nodeId(nodeId)
+                                        .name(name)
+                                        .fullName(fullName)
+                                        .ownerLogin(fullName.contains("/") ? fullName.split("/")[0] : accountLogin)
+                                        .privateRepo(isPrivate)
+                                        .createdAt(OffsetDateTime.now())
+                                        .updatedAt(OffsetDateTime.now())
+                                        .build();
+
+                                repositoryRepository.save(newRepo);
+                                savedCount++;
+                                log.info("Repository saved from installation: {} ({})", fullName, githubRepoId);
+                            } else {
+                                log.debug("Repository already exists: {}, skipping", fullName);
+                            }
+
+                        } catch (Exception e) {
+                            log.error("Error processing repository from installation: {}", e.getMessage(), e);
+                        }
+                    }
+
+                    log.info("Saved {} repositories from installation event", savedCount);
+                } else {
+                    log.warn("No repositories found in installation event payload");
+                }
 
             } else if ("deleted".equals(action)) {
                 // Eliminar instalación
